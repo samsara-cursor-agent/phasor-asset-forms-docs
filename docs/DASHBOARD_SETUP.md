@@ -34,27 +34,30 @@ Create **three** workflows (Automations *or* classic Alerts). Prefer **classic A
 | # | Trigger | Template filter | Action |
 |---|---------|-----------------|--------|
 | 1 | **Form Submitted** | Asset Transfer | Execute Function → `asset-transfer-assign` |
-| 2 | **Form Submitted** (or Form Updated → status completed) | Asset Receive | Execute Function → `asset-transfer-assign` |
+| 2 | **Form Completed** (preferred) or **Form Submitted** | Asset Receive | Execute Function → `asset-transfer-assign` |
 | 3 | **Form Submitted** | Asset Inventory | Execute Function → `asset-transfer-assign` |
+
+> **Receive note (2026-11-24):** Driver App Transfer + Receive Automations **are** firing (`activity`). Receive handler only applies ownership/**Active** when status is **`completed`**. Prefer **Form Completed**. If Assignments API is 403 for the org, status still goes Active; ownership must wait until `/fleet/assets/assignments` is enabled. Details: [`RECEIVE_AUTOMATION.md`](RECEIVE_AUTOMATION.md).
 
 #### Ryan checklist (do in order)
 
 1. **Settings → Developer → Functions → `asset-transfer-assign` → Visibility = customer users** (required for Execute Function). If the Function was not visible, re-open each Alert/Automation and re-select the Function.
 2. Create or open the Transfer workflow: trigger **Form Submitted**, template **Asset Transfer** (`b985b684-…`), action **Execute Function → asset-transfer-assign**. Save and **Enable**.
-3. Repeat for **Asset Receive** and **Asset Inventory**.
-4. **Apply To** = all / org-wide (not a restrictive tag). No score/answer filters that block these forms.
-5. Optional: map submission id → event param **`FormSubmissionId`** if the UI allows field mapping.
-6. **Verify via Driver App** (not only dashboard complete): submit Transfer → expect a Function run within **~60s** and a new Asset Receive for the recipient. Dashboard-only completes have historically skipped some Form Submitted paths.
-7. If still no run: leave Visibility + enablement as above and escalate platform delivery; meanwhile `POST /functions/asset-transfer-assign/runs` with `FormSubmissionId` for orphans.
+3. **Asset Receive (required for ownership/Active):** trigger **Form Completed** (or Form Submitted if completes land as `completed`), template **Asset Receive** (`e6531fce-…`), action **Execute Function → asset-transfer-assign**. Save and **Enable**.
+4. Repeat for **Asset Inventory** (Form Submitted).
+5. **Apply To** = all / org-wide (not a restrictive tag). No score/answer filters that block these forms.
+6. Optional: map submission id → event param **`FormSubmissionId`** if the UI allows field mapping.
+7. **Verify via Driver App:** submit Transfer → Function run + new Receive for recipient (~60s). Recipient completes Receive → Function `action=update` + asset **Active** (~60s). See [`RECEIVE_AUTOMATION.md`](RECEIVE_AUTOMATION.md).
+8. If Transfer/Receive run but assignment 403s: escalate **Asset Assignments API enablement** for the org; Function still sets Active after the 22:04 redeploy.
 
 Other details:
 
 1. Use **Form Submitted** for Transfer and Inventory (fires once when the form reaches its submitted end state). Do **not** use Form Updated for Transfer unless you add a status filter — Form Updated fires on every edit.
-2. For Receive, Form Submitted is enough if drivers submit to completion. If you rely on an approval transition, use Form Updated with status = completed.
-3. Optional Function params (pin after you copy ids from an Alert/Automation URL or from Function logs):
-   - `SUBMIT_AUTOMATION_CONFIGURATION_IDS` / `SUBMIT_ALERT_CONFIGURATION_IDS` — Transfer
-   - `UPDATE_AUTOMATION_CONFIGURATION_IDS` / `UPDATE_ALERT_CONFIGURATION_IDS` — Receive
-   - `INVENTORY_AUTOMATION_CONFIGURATION_IDS` / `INVENTORY_ALERT_CONFIGURATION_IDS` — Inventory
+2. For Receive, prefer **Form Completed**. Form Submitted works when the Driver App lands `status=completed` (Phasor Driver App path does). Non-completed Receive runs log and no-op.
+3. Function params already pinned from live Driver App Automations (2026-11-24):
+   - `SUBMIT_AUTOMATION_CONFIGURATION_IDS=053a0af9-e0b0-4ee9-b49d-800f31f7d44c` — Transfer
+   - `UPDATE_AUTOMATION_CONFIGURATION_IDS=3f1c8339-ce22-4e98-8816-f95962517de1` — Receive
+   - Optional: `INVENTORY_AUTOMATION_CONFIGURATION_IDS` / `*_ALERT_CONFIGURATION_IDS`
 4. Optional `WORKFLOW_ACTION=submit|update|inventory` — only needed for manual/API test runs without a real submission template. Live Automations should rely on template routing.
 
 ### Expected effects
